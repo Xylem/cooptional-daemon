@@ -349,6 +349,8 @@ function wait(n) {
 
 function * runProcessing () {
     while (true) {
+        yield wait(60000);
+
         try {
             const {videoID, videoTitle} = yield getVideoData();
             if (!videoID) {
@@ -368,8 +370,6 @@ function * runProcessing () {
         } catch (e) {
             console.error(e);
         }
-
-        yield wait(60000);
     }
 }
 
