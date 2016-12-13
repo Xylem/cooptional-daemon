@@ -1,0 +1,23 @@
+{
+  "name": "cooptional-daemon",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "author": "Xylem",
+  "license": "MIT",
+  "dependencies": {
+    "bluebird": "^3.4.6",
+    "co": "^4.6.0",
+    "co-functional": "^0.2.1",
+    "co-request": "^1.0.0",
+    "lodash": "^4.17.2",
+    "lowdb": "^0.14.0",
+    "node-gd": "^1.4.0",
+    "printf": "^0.2.5",
+    "snoowrap": "^1.11.3",
+    "ytdl-core": "^0.7.20"
+  }
+}
