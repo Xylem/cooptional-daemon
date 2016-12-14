@@ -34,12 +34,14 @@ const TEMP_DIR = './tmp';
 const FRAME_FILENAME = 'frames.txt';
 const CLIP_WIDTH = 1280;
 const CLIP_HEIGHT = 30;
-const EMPTY_BAND_HEIGHT = 5; // height of bands on top and at the bottom of the clipped frame that should be relatively empty in captions
+const MINIMAL_HEIGHT = 14; // minimal height of frame after cropping white borders
+const MAXIMAL_OFF_CENTER_FACTOR = 10; // how much off-center a caption can be
+const EMPTY_BAND_HEIGHT = 2; // height of bands on top and at the bottom of the clipped frame that should be relatively empty in captions
 const WHITE_THRESHOLD = 250; // value 0-255 - lowest bound for color to be still considered white - 255 = pure white
 const BLACK_THRESHOLD = 5; // value 0-255 - highest bound for color to be still considered blac - 0 = pure black
-const CAPTION_NON_WHITE_THRESHOLD = 0; // how many non-white pixels can be found in the empty bands for the image to be considered caption
+const CAPTION_NON_WHITE_THRESHOLD = 20; // how many non-white pixels can be found in the empty bands for the image to be considered caption
 const CAPTION_BLACK_THRESHOLD = 1000; // how many black pixels must there be between empty bands for image to be considered caption
-const DIFFERENCE_THRESHOLD = 150; // how many pixels must image differ from previous to be considered a new caption
+const DIFFERENCE_THRESHOLD = 300; // how many pixels must image differ from previous to be considered a new caption
 
 const OFFSET = 60; // timestamps will be offset back by this many seconds to account for delay in changing captions
 const PLAYLIST_ID = 'UUy1Ms_5qBTawC-k7PVjHXKQ';
@@ -139,6 +141,70 @@ function * generateCaptionImages (videoFileURL) {
     });
 }
 
+function getPixelAt(image, x, y) {
+    return image.getBoundsSafe(x, y) ? image.getTrueColorPixel(x, y) : 0xffffff;
+}
+
+function isPixelBlack(color) {
+    return r(color) < BLACK_THRESHOLD || g(color) < BLACK_THRESHOLD || b(color) < BLACK_THRESHOLD;
+}
+
+function isPixelNotWhite(color) {
+    return r(color) < WHITE_THRESHOLD || g(color) < WHITE_THRESHOLD || b(color) < WHITE_THRESHOLD;
+}
+
+function despeckle(file) {
+    let x, y, dx, dy, blackCount;
+
+    for (y = 0; y < CLIP_HEIGHT; ++y) {
+        for (x = 0; x < CLIP_WIDTH; ++x) {
+            const pixelColor = file.image.getTrueColorPixel(x, y);
+
+            if (isPixelBlack(pixelColor)) {
+                blackCount = 0;
+
+                for (dy = y - 1; dy <= y + 1; ++dy) {
+                    for (dx = x - 1; dx <= x + 1; ++dx) {
+                        if (isPixelBlack(getPixelAt(file.image, dx, dy))) {
+                            ++blackCount;
+                        }
+                    }
+                }
+
+                if (blackCount <= 1) {
+                    file.image.setPixel(x, y, 0xffffff);
+                }
+            }
+        }
+    }
+}
+
+function detectSideBorders(file) {
+    let x, y;
+
+    for (x = 0; x < CLIP_WIDTH; ++x) {
+        for (y = 0; y < CLIP_HEIGHT; ++y) {
+            const pixelColor = file.image.getTrueColorPixel(x, y);
+
+            if (isPixelBlack(pixelColor)) {
+                file.leftmostBlackX = x;
+                break;
+            }
+        }
+    }
+
+    for (x = CLIP_WIDTH - 1; x >= 0; --x) {
+        for (y = 0; y < CLIP_HEIGHT; ++y) {
+            const pixelColor = file.image.getTrueColorPixel(x, y);
+
+            if (isPixelBlack(pixelColor)) {
+                file.rightmostBlackX = x;
+                break;
+            }
+        }
+    }
+}
+
 function * filterUniqueCaptionImages () {
     return (yield fs.readdirAsync(TEMP_DIR))
         .filter(filename => filename.endsWith('.png'))
@@ -163,7 +229,7 @@ function * filterUniqueCaptionImages () {
                 for (x = 0; x < CLIP_WIDTH; ++x) {
                     pixelColor = img.getTrueColorPixel(x, y);
 
-                    if (r(pixelColor) < WHITE_THRESHOLD || g(pixelColor) < WHITE_THRESHOLD || b(pixelColor) < WHITE_THRESHOLD) {
+                    if (isPixelNotWhite(pixelColor)) {
                         ++nonWhitePixelCount;
                     }
                 }
@@ -173,7 +239,7 @@ function * filterUniqueCaptionImages () {
                 for (x = 0; x < CLIP_WIDTH; ++x) {
                     pixelColor = img.getTrueColorPixel(x, y);
 
-                    if (r(pixelColor) < BLACK_THRESHOLD || g(pixelColor) < BLACK_THRESHOLD || b(pixelColor) < BLACK_THRESHOLD) {
+                    if (isPixelBlack(pixelColor)) {
                         ++blackPixelCount;
                     }
                 }
@@ -183,13 +249,40 @@ function * filterUniqueCaptionImages () {
                 for (x = 0; x < CLIP_WIDTH; ++x) {
                     pixelColor = img.getTrueColorPixel(x, y);
 
-                    if (r(pixelColor) < WHITE_THRESHOLD || g(pixelColor) < WHITE_THRESHOLD || b(pixelColor) < WHITE_THRESHOLD) {
+                    if (isPixelNotWhite(pixelColor)) {
                         ++nonWhitePixelCount;
                     }
                 }
             }
 
             const kept = nonWhitePixelCount <= CAPTION_NON_WHITE_THRESHOLD && blackPixelCount >= CAPTION_BLACK_THRESHOLD;
+
+            if (!kept) {
+                removeImageFile(file);
+            }
+
+            return kept;
+        })
+        .filter(file => {
+            despeckle(file);
+            detectSideBorders(file);
+
+            const offCenterFactor = Math.abs(CLIP_WIDTH - file.leftmostBlackX - file.rightmostBlackX);
+
+            const kept = offCenterFactor <= MAXIMAL_OFF_CENTER_FACTOR;
+
+            if (!kept) {
+                removeImageFile(file);
+            }
+
+            return kept;
+        })
+        .filter(file => {
+            const croppedToText = file.image.cropAuto(4);
+
+            const kept = croppedToText.height >= MINIMAL_HEIGHT;
+
+            croppedToText.destroy();
 
             if (!kept) {
                 removeImageFile(file);
@@ -239,7 +332,7 @@ function * matchText (file) {
         err ? reject(err) : resolve();
     }));
 
-    yield execAsync(`ocropus-rpred -m ./src/font/xolonium-00105000.pyrnn.gz ${file.path}`);
+    yield execAsync(`ocropus-rpred -m ./src/font/xolonium-00019000.pyrnn.gz ${file.path}`);
 
     removeImageFile(file);
 
