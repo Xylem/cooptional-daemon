@@ -336,7 +336,12 @@ function * matchText (file) {
 
     removeImageFile(file);
 
-    file.caption = (yield fs.readFileAsync(path.join(TEMP_DIR, file.basename + '.txt'), 'utf8')).trim();
+    try {
+        file.caption = (yield fs.readFileAsync(path.join(TEMP_DIR, file.basename + '.txt'), 'utf8')).trim();
+    } catch (e) {
+        console.error(`File ${file.basename}.txt is not readable`);
+        file.unreadable = true;
+    }
 }
 
 function formatAsTime(timestamp) {
@@ -353,7 +358,9 @@ function buildCaptions(captions, videoURL) {
 
     const rawVideoUrl = url.parse(videoURL, true);
 
-    const list = captions.map(caption => {
+    const list = captions.filter(caption => {
+        return !caption.unreadable;
+    }).map(caption => {
         const timestampURL = _.cloneDeep(rawVideoUrl);
         timestampURL.query.t = caption.time;
         delete timestampURL.search;
