@@ -412,7 +412,7 @@ function postToSubreddit(videoTitle, videoURL, videoID, captionsText) {
     return function * (subreddit) {
         console.log(`Searching for Reddit thread on /r/${subreddit} for video ${videoID}`);
         let post = yield reddit.search({
-            query: `url:${videoID}`,
+            query: `url:'${videoID}'`,
             subreddit: subreddit,
             syntax: 'lucene'
         })[0];
