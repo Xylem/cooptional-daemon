@@ -451,20 +451,15 @@ function * runProcessing () {
     while (true) {
         try {
             const {videoID, videoTitle} = yield getVideoData();
-            if (!videoID) {
-                continue;
+
+            if (videoID && !checkVideoAlreadyPosted(videoID)) {
+                console.log(`Found video without captions posted: ID ${videoID}`);
+                const videoURL = `https://www.youtube.com/watch?v=${videoID}`;
+
+                const captionsText = yield generateCaptions(videoURL, videoID);
+
+                yield postCaptionsToReddit(videoTitle, videoURL, videoID, captionsText);
             }
-
-            if (checkVideoAlreadyPosted(videoID)) {
-                continue;
-            }
-
-            console.log(`Found video without captions posted: ID ${videoID}`);
-            const videoURL = `https://www.youtube.com/watch?v=${videoID}`;
-
-            const captionsText = yield generateCaptions(videoURL, videoID);
-
-            yield postCaptionsToReddit(videoTitle, videoURL, videoID, captionsText);
         } catch (e) {
             console.error(e);
         }
