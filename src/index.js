@@ -420,11 +420,12 @@ function postToSubreddit(videoID, captionsText) {
         }
 
         console.log(`Searching for Reddit thread on /r/${subreddit} for video ${videoID}`);
-        let post = yield reddit.search({
-            query: `url:'${videoID}'`,
-            subreddit: subreddit,
-            syntax: 'lucene'
-        })[0];
+        let post = yield reddit
+            .getSubreddit(subreddit)
+            .getNew()
+            .then(newSubmissions => {
+                return newSubmissions.find(submission => new RegExp(videoID, 'i').test(submission.url))
+            });
 
         if (!post) {
             console.log(`Reddit thread on /r/${subreddit} for video ${videoID} not found - waiting`);
