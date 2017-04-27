@@ -69,7 +69,7 @@ function calculateImageDifference (imageA, imageB) {
             isBBlack = r(imageAPixelColor) < 200 && g(imageAPixelColor) < 200 && b(imageAPixelColor) < 200;
             isABlack = r(imageBPixelColor) < 200 && g(imageBPixelColor) < 200 && b(imageBPixelColor) < 200;
 
-            if (isBBlack != isABlack) {
+            if (isBBlack !== isABlack) {
                 ++imageDifference;
             }
         }
@@ -97,8 +97,12 @@ function execAsync(command, options) {
     }))
 }
 
+function checkVideoPostedOnSubreddit(videoID, subreddit) {
+    return !!db.get(`videos.${videoID}.subreddits.${subreddit}.post`).value();
+}
+
 function checkVideoAlreadyPosted(videoID) {
-    return SUBREDDITS.every(subreddit => db.get(`videos.${videoID}.subreddits.${subreddit}.post`).value());
+    return SUBREDDITS.every(subreddit => checkVideoPostedOnSubreddit(videoID, subreddit));
 }
 
 function * getVideoData() {
@@ -408,8 +412,13 @@ function * generateCaptions (videoURL, videoID) {
     return captionsText;
 }
 
-function postToSubreddit(videoTitle, videoURL, videoID, captionsText) {
+function postToSubreddit(videoID, captionsText) {
     return function * (subreddit) {
+        if (checkVideoPostedOnSubreddit(videoID, subreddit)) {
+            console.log(`Already posted captions on /r/${subreddit} for video ${videoID} - skipping`);
+            return;
+        }
+
         console.log(`Searching for Reddit thread on /r/${subreddit} for video ${videoID}`);
         let post = yield reddit.search({
             query: `url:'${videoID}'`,
@@ -418,12 +427,8 @@ function postToSubreddit(videoTitle, videoURL, videoID, captionsText) {
         })[0];
 
         if (!post) {
-            console.log(`Reddit thread on /r/${subreddit} for video ${videoID} not found - creating`);
-
-            post = yield r.getSubreddit(subreddit).submitLink({
-                title: videoTitle,
-                url: videoURL
-            });
+            console.log(`Reddit thread on /r/${subreddit} for video ${videoID} not found - waiting`);
+            return;
         }
 
         console.log(`Reddit thread on /r/${subreddit} for video ${videoID} found - posting captions`);
@@ -439,8 +444,8 @@ function postToSubreddit(videoTitle, videoURL, videoID, captionsText) {
     }
 }
 
-function * postCaptionsToReddit(videoTitle, videoURL, videoID, captionsText) {
-     yield cf.forEach(postToSubreddit(videoTitle, videoURL, videoID, captionsText), SUBREDDITS);
+function * postCaptionsToReddit(videoID, captionsText) {
+     yield cf.forEach(postToSubreddit(videoID, captionsText), SUBREDDITS);
 }
 
 function wait(n) {
@@ -450,7 +455,7 @@ function wait(n) {
 function * runProcessing () {
     while (true) {
         try {
-            const {videoID, videoTitle} = yield getVideoData();
+            const {videoID} = yield getVideoData();
 
             if (videoID && !checkVideoAlreadyPosted(videoID)) {
                 console.log(`Found video without captions posted: ID ${videoID}`);
@@ -458,7 +463,7 @@ function * runProcessing () {
 
                 const captionsText = yield generateCaptions(videoURL, videoID);
 
-                yield postCaptionsToReddit(videoTitle, videoURL, videoID, captionsText);
+                yield postCaptionsToReddit(videoID, captionsText);
             }
         } catch (e) {
             console.error(e);
