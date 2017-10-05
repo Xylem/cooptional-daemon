@@ -45,7 +45,7 @@ const DIFFERENCE_THRESHOLD = 300; // how many pixels must image differ from prev
 
 const OFFSET = 60; // timestamps will be offset back by this many seconds to account for delay in changing captions
 const PLAYLIST_ID = 'UUy1Ms_5qBTawC-k7PVjHXKQ';
-const SUBREDDITS = [ 'cynicalbrit', 'cynicalbritofficial' ];
+const SUBREDDITS = [ 'cynicalbrit' ];
 
 const r = color => color & 0xff0000 >> 16;
 const g = color => color & 0x00ff00 >> 8;
