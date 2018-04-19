@@ -24,7 +24,7 @@ const lowdb = require('lowdb');
 const db = lowdb('./db/db.json');
 const snoowrap = require('snoowrap');
 const reddit = new snoowrap({
-    userAgent: 'cooptional-daemon v1.0.0',
+    userAgent: 'cooptional-daemon v1.3.0',
     clientId: process.env.REDDIT_CLIENT_ID,
     clientSecret: process.env.REDDIT_CLIENT_SECRET,
     refreshToken: process.env.REDDIT_REFRESH_TOKEN
@@ -32,13 +32,13 @@ const reddit = new snoowrap({
 
 const TEMP_DIR = './tmp';
 const FRAME_FILENAME = 'frames.txt';
-const CLIP_WIDTH = 1280;
-const CLIP_HEIGHT = 30;
+const CLIP_WIDTH = 634;
+const CLIP_HEIGHT = 34;
 const MINIMAL_HEIGHT = 14; // minimal height of frame after cropping white borders
 const MAXIMAL_OFF_CENTER_FACTOR = 10; // how much off-center a caption can be
 const EMPTY_BAND_HEIGHT = 2; // height of bands on top and at the bottom of the clipped frame that should be relatively empty in captions
 const WHITE_THRESHOLD = 250; // value 0-255 - lowest bound for color to be still considered white - 255 = pure white
-const BLACK_THRESHOLD = 5; // value 0-255 - highest bound for color to be still considered blac - 0 = pure black
+const BLACK_THRESHOLD = 5; // value 0-255 - highest bound for color to be still considered black - 0 = pure black
 const CAPTION_NON_WHITE_THRESHOLD = 20; // how many non-white pixels can be found in the empty bands for the image to be considered caption
 const CAPTION_BLACK_THRESHOLD = 1000; // how many black pixels must there be between empty bands for image to be considered caption
 const DIFFERENCE_THRESHOLD = 300; // how many pixels must image differ from previous to be considered a new caption
@@ -135,7 +135,7 @@ function * getVideoFileURL(youtubeURL) {
 
 function * generateCaptionImages (videoFileURL) {
     yield execAsync(`ffmpeg -i '${videoFileURL}' -vf "fps=1[skipped];
-        [skipped]crop=in_w:${CLIP_HEIGHT}:0:in_h-${CLIP_HEIGHT}[cropped];
+        [skipped]crop=${CLIP_WIDTH}:${CLIP_HEIGHT}:415:in_h-${CLIP_HEIGHT}-20[cropped];
         [cropped]mpdecimate=lo=64*10:hi=64*20,showinfo[decimated];
         [decimated]hue=s=0[bw];
         [bw]curves=m='0/1 .3/1 .31/0 1/0'" -vsync 0 %5d.png 2>&1 >/dev/null |
@@ -262,6 +262,7 @@ function * filterUniqueCaptionImages () {
             const kept = nonWhitePixelCount <= CAPTION_NON_WHITE_THRESHOLD && blackPixelCount >= CAPTION_BLACK_THRESHOLD;
 
             if (!kept) {
+                console.log(`Not enough black pixels in caption (${blackPixelCount}) or too many black pixels outside caption (${nonWhitePixelCount}) for ${file.name}`);
                 removeImageFile(file);
             }
 
@@ -276,6 +277,7 @@ function * filterUniqueCaptionImages () {
             const kept = offCenterFactor <= MAXIMAL_OFF_CENTER_FACTOR;
 
             if (!kept) {
+                console.log(`Caption too off center for ${file.name}`);
                 removeImageFile(file);
             }
 
@@ -289,6 +291,7 @@ function * filterUniqueCaptionImages () {
             croppedToText.destroy();
 
             if (!kept) {
+                console.log(`Caption too small for ${file.name}`);
                 removeImageFile(file);
             }
 

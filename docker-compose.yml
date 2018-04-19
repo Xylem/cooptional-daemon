@@ -1,10 +1,12 @@
-version: '2'
+version: '3'
 services:
   cooptional-daemon:
     restart: always
     build: .
     volumes:
     - ./db:/usr/src/app/db
+    env_file:
+    - ./.env
     environment:
     - YT_API_KEY
     - REDDIT_CLIENT_ID
